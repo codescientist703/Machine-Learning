@@ -77,10 +77,10 @@ class Agent:
         model.compile(loss=self.loss, optimizer=self.optimizer)
         return model
 
-    def remember(self, state, action, reward, next_state):
+    def remember(self, state, action, reward, next_state, done):
         """Adds relevant data to memory
         """
-        self.memory.append((state, action, reward, next_state))
+        self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state, is_eval=False):
         """Take action from given possible set of actions

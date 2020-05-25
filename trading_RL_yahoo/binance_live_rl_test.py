@@ -2,13 +2,15 @@ import lxml.html as lh
 import time
 import urllib.request
 import argparse
+import urllib.request, urllib.parse, urllib.error
 import datetime
 import pytz
 from selenium import webdriver
 from selenium.common.exceptions import StaleElementReferenceException
 import os
 import coloredlogs
-
+import json
+import ssl
 from docopt import docopt
 from trading_bot.ops import get_state
 from trading_bot.agent import Agent
@@ -21,41 +23,20 @@ from trading_bot.utils import (
     switch_k_backend_device
 )
 
-
-
-
 tz = pytz.timezone('Asia/Kolkata')
-
-path1 = os.getcwd()
-path = path1 + '/chromedriver'
-
-ignored_exceptions=(StaleElementReferenceException,)
-options = webdriver.ChromeOptions()
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--headless')
-options.add_experimental_option('excludeSwitches', ['enable-logging'])
-#options.add_argument(f'user-agent={userAgent}')
-driver = webdriver.Chrome(executable_path=path , options=options)
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
 
 
+def Real(url):
+    uh = urllib.request.urlopen(url, context=ctx)
+    data = uh.read().decode()
+    info = json.loads(data)
+    live = info['price'];
+    time.sleep(1)
+    return float(live) 
 
-#This function returns the table of the given url
-def Real(url,count):
-    if count == 0:
-        
-        driver.get(url)
-        #print(driver)
-
-    else:
-        driver.refresh()
-        time.sleep(15)
-
-    infile = driver.page_source
-    doc = lh.fromstring(infile)
-    live = doc.xpath('/html/body/div[1]/div/div/div[1]/div/div[2]/div/div/div[4]/div/div/div/div[3]/div/div/span[1]')
-    live = float(live[0].text.replace(',',''))
-    return live 
 
 def main(args):
     count = 0
@@ -63,19 +44,21 @@ def main(args):
     t=0
     history = []
     reward = 0
-    ticker = args.ticker + '.NS'
     price = []
     window_size =10
     time_now = datetime.datetime.now(tz).time()
-    while(datetime.time(9, 14, tzinfo=tz) < time_now < datetime.time(15, 31, tzinfo=tz)):
-        url = 'https://finance.yahoo.com/quote/{}?p={}&.tsrc=fin-srch'.format(ticker,ticker)
-        print(count)
-        live = Real(url,count)
+    url = 'https://api.binance.com/api/v1/ticker/price?symbol={}'.format(args.ticker)
+    live = Real(url)
+    print(live)
+
+    while(count < 100):
+        url = 'https://api.binance.com/api/v1/ticker/price?symbol={}'.format(args.ticker)
+        live = Real(url)
         count+=1        
         price.append(live)
         if count < window_size:
            continue
-        model_name='model_debug_50'  
+        model_name='model_t-dqn_GOOG_10'  
         print(live)
         initial_offset = price[1] - price[0]
         state = get_state(price, 0, window_size + 1)
@@ -86,6 +69,7 @@ def main(args):
         show_eval_result(model_name, profit, initial_offset)
         t+=1
         state = next_state
+
 def evaluate_model(agent, state, next_state, data, t, total_profit, history, reward, window_size, debug=False):
   
     print(t)
